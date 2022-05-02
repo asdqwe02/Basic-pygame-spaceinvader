@@ -1,4 +1,3 @@
-from re import purge
 import pygame
 from debug import debug
 from Laser import Laser
@@ -20,6 +19,11 @@ class Player(pygame.sprite.Sprite): # Inherit from Sprite class
         self.lasers=pygame.sprite.Group() # player laser
         self.playerHP = hp
 
+        # Audio
+        self.laser_sound = pygame.mixer.Sound('./audio/laser.wav')
+        self.laser_sound.set_volume(0.2)
+
+
     #process input   
     def get_input(self):
         keys = pygame.key.get_pressed()
@@ -36,8 +40,8 @@ class Player(pygame.sprite.Sprite): # Inherit from Sprite class
             self.ready = False
             self.laser_time = pygame.time.get_ticks()
 
-    def getHit(self):
-        self.playerHP-=1
+    def getHit(self,damage=1):
+        self.playerHP-=damage
 
     def update(self):
         self.get_input()
@@ -45,19 +49,18 @@ class Player(pygame.sprite.Sprite): # Inherit from Sprite class
         self.lasers.update()
 
     def checkBoundary(self):
-        debug('Player position x:{}'.format(self.rect.x))
+        # debug('Player position x:{}'.format(self.rect.x))
         if self.rect.right >= self.max_x_constraint:
             self.rect.right = self.max_x_constraint
         if self.rect.left < 0:
             self.rect.left = 0 
 
     def shoot_laser(self):
-
         # can use self.rect.bottom because player conveniently is at the bottom of screen
         self.lasers.add(Laser(self.rect.center,8,1,self.rect.bottom))
-        pass
+        self.laser_sound.play()
     def recharge(self):
         if not self.ready:
-            curren_time = pygame.time.get_ticks()
-            if curren_time - self.laser_time >= self.laser_cd:
+            current_time = pygame.time.get_ticks()
+            if current_time - self.laser_time >= self.laser_cd:
                 self.ready=True   

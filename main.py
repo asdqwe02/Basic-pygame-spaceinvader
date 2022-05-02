@@ -1,22 +1,40 @@
+from genericpath import exists
+import json
 from random import randint, random
-from re import purge
+from re import T
 from secrets import choice
-import pygame,sys
+import pygame,sys,time
 from Laser import Laser
 from debug import debug
 from Player import Player
 import Obstacle
 import Alien
 
-
 class Game:
     def __init__(self):
+        self.restart = False
+        self.pause = False
+
+        self.hi_score  = 0
+        if exists('./save/save_file.txt'):
+            with open('./save/save_file.txt') as save_file:
+                data = json.load(save_file)
+            self.hi_score = data['High Score'] 
+        
         # Player setup
         player_sprite = Player((screen_width/2,screen_height),screen_width,5)
         self.player = pygame.sprite.GroupSingle(player_sprite)
 
-        # Score
-        self.highscore = 0
+        # Score and Font setup
+        self.score = 0
+        self.font=pygame.font.Font('./font/Pixeled.ttf',15)
+
+        
+        # Player lives display setup
+        self.live_surf = pygame.image.load('./graphics/heart.png').convert_alpha()
+        self.live_surf = pygame.transform.scale(self.live_surf,(40,35))
+        self.live_x_start_pos = screen_width - (self.live_surf.get_size()[0]*self.player.sprite.playerHP + 30)
+        
 
         # Obstacles setup
         self.shape = Obstacle.shape
@@ -29,19 +47,38 @@ class Game:
 
         # Alien setup
         self.aliens = pygame.sprite.Group()
-        self.alien_formation = Alien.formation
+        # self.alien_formation = Alien.formation2
+        # self.alien_formation = Alien.formation
+        self.alien_formation = Alien.formation2
+
         self.alien_direction = 1
         self.alien_lasers = pygame.sprite.Group() # alien lasers
+        self.base_aliens_amount = self.alien_setup(self.alien_formation)
+        self.alien_ratio = len(self.aliens.sprites())/self.base_aliens_amount
+        # print(self.base_aliens_amount) #debug
+
 
         # Extra alien setup
         self.extra = pygame.sprite.GroupSingle()
         self.extra_spawn_time = randint(400,800) 
 
-        # self.alien_setup(0,50,100,150,200,formation= self.alien_cols,x_start = 0,y_start =180)
-        # self.alien_setup(*self.alien_x_offset,formation= self.alien_cols,x_start = 0,y_start =180)
-        self.alien_setup(self.alien_formation)
+        # Boss alien setup
+        self.boss_alien = pygame.sprite.GroupSingle()
+        self.boss_spawned = False
 
+        # Audio setup
+        self.music = []
+        self.music.append(pygame.mixer.Sound('./audio/music.wav')) # music track 0
+        self.music.append(pygame.mixer.Sound('./audio/8-Bit Boss Battle- 4 - By EliteFerrex.mp3')) # music track 1
+        self.music[0].set_volume(0.25)
+        self.music[0].play(loops=-1)
 
+        self.current_music_track = 0
+
+        self.laser_sound = pygame.mixer.Sound('./audio/laser.wav')
+        self.laser_sound.set_volume(0.2)
+        self.explosion_sound = pygame.mixer.Sound('./audio/explosion.wav')
+        self.explosion_sound.set_volume(0.3)
 
     def create_obstacle(self,x_start, y_start,offset_x):
         for row_index, row in enumerate(self.shape):
@@ -56,7 +93,7 @@ class Game:
         for offset_x in offset:
             self.create_obstacle(x_start,y_start,offset_x)
 
-    def alien_setup(self,formation,x_distance=40,y_distance=48,offset_x=10,offset_y=100):
+    def alien_setup(self,formation,x_distance=60,y_distance=48,offset_x=10,offset_y=100):
         color = {
             1:'red',
             2:'yellow',
@@ -65,34 +102,38 @@ class Game:
 
         # 40 is the width of the alien | space between alien is 20 -> 60
         # alien amount = count 'x' in the formation
-        # x_start = (screen_width / alien_amount*60) / 2
-        alien_amount = []
+        # x_start = (screen_width - (alien_amount*60)) / 2
+        alien_amount_on_row = []
+        for row_formation in self.alien_formation: # coun the amount of alien on each rows
+            temp = row_formation.count('x')
+            alien_amount_on_row.append(temp)
         x_start = [
-            num for num in range(self.obstacle_amount) 
+            (screen_width-(num*60))/2 for num in alien_amount_on_row 
         ]
         for row_index,row in enumerate(formation):
             # random alien color on each row
             c = color[randint(1,3)]
             for columnn_index, col in enumerate(row):
                 if col =='x':
-                    x = columnn_index*x_distance + offset_x
+                    # x = columnn_index*x_distance + offset_x
+                    x = columnn_index * x_distance + x_start[row_index]
                     y = row_index*y_distance + offset_y
                     # random alien color
                     # c = color[randint(1,3)] 
                     alien_sprite = Alien.Alien(c,x,y)
                     self.aliens.add(alien_sprite)
-
+        return len(self.aliens)
     # This is in main.py because it need to check out all the aliens which is being
     # setup in the main.py file
-    # really want to put these alien control block inside the alien class but idk how
+    # really want to put these alien control block inside the alien class but too lazy
     def alien_side_pos_checker(self):
         for alien in self.aliens.sprites():
             if alien.rect.right >= screen_width:
                 self.alien_direction = -1
-                self.alien_move_down(2)
+                self.alien_move_down(1)
             if alien.rect.left <= 0:
                 self.alien_direction = 1
-                self.alien_move_down(2)
+                self.alien_move_down(1)
     def alien_move_down(self,distance):
         if self.aliens: # avoid null ref
             for alien in self.aliens.sprites():
@@ -101,39 +142,77 @@ class Game:
         if self.aliens.sprites(): # to avoid null ref
             #choose random in collections
             random_alien = choice(self.aliens.sprites())
-            laser_sprite = Laser(random_alien.rect.center,speed=10,direction=0,screen_height=screen_height)
+            laser_sprite = Laser(random_alien.rect.center,speed=8,direction=0,screen_height=screen_height,type=1)
             self.alien_lasers.add(laser_sprite)
-    
+            self.laser_sound.play()
+    def alien_check_remain(self): # increase speed when certain amount of alien die sidenote: this look bad for performance
+        # trying to optimize it a bit
+        current_aliens_amount =  len(self.aliens.sprites())
+        ratio = current_aliens_amount/self.base_aliens_amount
+        if current_aliens_amount>=1 and ratio!=self.alien_ratio: 
+            self.alien_ratio=ratio
 
+            if current_aliens_amount/self.base_aliens_amount <= 0.75:
+                for alien in self.aliens.sprites():
+                    alien.setspeed(2)
+            if current_aliens_amount/self.base_aliens_amount <= 0.50:
+                for alien in self.aliens.sprites():
+                    alien.setspeed(3)
+            if current_aliens_amount/self.base_aliens_amount <= 0.25:
+                for alien in self.aliens.sprites():
+                    alien.setspeed(4)
+            if current_aliens_amount == 1:
+                for last_alien in self.aliens.sprites():
+                    last_alien.setspeed(8)   
+        if current_aliens_amount == 0 and len(self.boss_alien.sprites())==0 and not self.boss_spawned: # spawn boss alien when there are no more aliens in list
+            self.boss_alien.add(Alien.BossAlien(screen_width/2,-240,speed=2))
+            self.boss_spawned=True    
+            self.music[self.current_music_track].fadeout(2000)
+            self.next_music_track = 1
+            pygame.time.set_timer(PLAYENEXTMUSICTRACK,2000,1)
+                
     # Extra alien methods
     def extra_alien_timer(self):
         self.extra_spawn_time -= 1
         if self.extra_spawn_time <= 0:
             # default speed for extra is 3
-            print(self.extra_spawn_time) # debug
+            # print(self.extra_spawn_time) # debug
             self.extra.add(Alien.Extra(choice(['right','left']),screen_width=screen_width))
             self.extra_spawn_time = randint(400,800)
-
 
     # Collision
     def collision_checks(self):
 
         # player's lasers
-        if self.player.sprite.lasers:
+        if self.player.sprite and self.player.sprite.lasers :
             for laser in self.player.sprite.lasers:
                 # obstacles collions
                 if pygame.sprite.spritecollide(laser,self.blocks,True):
                     laser.kill()
+                    pass
 
                 # aliens collisions
-                if pygame.sprite.spritecollide(laser,self.aliens,True):
-                    self.highscore+=10
+                collided_alien = pygame.sprite.spritecollide(laser,self.aliens,False) # get collided object
+                if collided_alien:
+                    for alien in collided_alien:
+                        self.score+=10
+                        alien.die()
                     laser.kill()
+                    self.explosion_sound.play()
+
+                # boss alien collisions
+                if pygame.sprite.spritecollide(laser,self.boss_alien,False):
+                    laser.kill()
+                    self.boss_alien.sprite.getHit()
+                    self.score +=50
+                    self.explosion_sound.play()
 
                 # extra collisions
                 if pygame.sprite.spritecollide(laser,self.extra,True):
-                    self.highscore+=100
+                    self.score+=100
                     laser.kill()
+                    self.explosion_sound.play()
+
 
         # alien's laser
         if self.alien_lasers:
@@ -144,27 +223,70 @@ class Game:
 
                 # player collisions
                 if pygame.sprite.spritecollide(laser,self.player,False):
-                    print('alien\'s laser hit player')
+                    # print('alien\'s laser hit player')
                     laser.kill()
                     self.player.sprite.getHit()
 
+        # alien boss's laser
+        if self.boss_alien.sprite:
+            if self.boss_alien.sprite.lasers:
+                for laser in self.boss_alien.sprite.lasers:
 
+                    # collide with obstacles
+                    if pygame.sprite.spritecollide(laser,self.blocks,True):
+                        laser.kill()
+
+                    # collide with player
+                    if pygame.sprite.spritecollide(laser,self.player,False):
+                        laser.kill()
+                        self.player.sprite.getHit()
+            if self.boss_alien.sprite.laser_beam: # boss's laser beam
+                for laser_beam in self.boss_alien.sprite.laser_beam:
+                    pygame.sprite.spritecollide(laser_beam,self.blocks,True)
+                    if pygame.sprite.spritecollide(laser_beam,self.player,False):
+                        self.player.sprite.getHit(3)
+
+        # aliens
         if self.aliens:
             for alien in self.aliens:
+                pygame.sprite.spritecollide(alien,self.blocks,True)
                 if pygame.sprite.spritecollide(alien,self.player,False):
-                    print('alien hit player')
+                    # print('alien hit player')
+                    self.player.sprite.getHit(3)
+                    
 
+    # DISPLAY FUNCTIONS
 
+    # display score function
+    def display_score(self):
+        score_surf = self.font.render('score: {}'.format(self.score),False,'white')
+        score_rect = score_surf.get_rect(topleft = (20,6))
+        hi_score_surf = self.font.render('Hi-score: {}'.format(self.hi_score),False,'white')
+        hi_score_rect = hi_score_surf.get_rect(topleft = (score_rect.right+20,6))
+        screen.blit(score_surf,score_rect)
+        screen.blit(hi_score_surf,hi_score_rect)
+    # display player livies function
+    def display_player_lives(self):
+        for live in range(self.player.sprite.playerHP):
+            x = self.live_x_start_pos + (live*(self.live_surf.get_size()[0] + 10))
+            screen.blit(self.live_surf,(x,10))
+            pass
+
+    # Adio function
+    def play_music_track(self,track_number,volume):
+         #loading in music while playing can cause delay in game :| idk how to fix
+        self.music[self.current_music_track].stop()
+        self.current_music_track = track_number
+        self.music[track_number].set_volume(volume)
+        self.music[track_number].play(loops=-1)
+    
     def run(self):
-
         # Debug
-        if self.player.sprite.playerHP > 0:
-            debug('Player HP: {}'.format(self.player.sprite.playerHP),y=40)
-        else: debug('Player died',y=40)
-
-        debug('Score: {}'.format(self.highscore),y=75)
+        # if self.player.sprite.playerHP > 0:
+        #     debug('Player HP: {}'.format(self.player.sprite.playerHP),y=40)
+        # else: debug('Player died',y=40)
         
-        # update and draw all sprites groups
+        # UPDATE
         
         # Colision 
         self.collision_checks()
@@ -173,43 +295,187 @@ class Game:
         self.player.update()
 
         # Aliens update
-        self.alien_side_pos_checker()
-        # self.aliens.update(self.alien_direction)
-        self.alien_lasers.update()
-        
-        self.extra_alien_timer()
-        self.extra.update()
+        self.alien_side_pos_checker() # check the boundary and move alien down
+        self.aliens.update(self.alien_direction) # update for alien
+        self.alien_lasers.update() # aliens laser update
+
+        self.alien_check_remain() # check remain to spawn boss and increase speed
+
+        self.extra_alien_timer() # timer for extra alien    
+        self.extra.update() # update for extra alien
+       
+        #DRAWda
 
         # draw player
         self.player.draw(screen)
 
         # draw lasers
-        self.player.sprite.lasers.draw(screen)
+        self.player.sprite.lasers.draw(screen) # player laser
+
+        # boss alien and its lasers draw and upadte
+        if self.boss_alien.sprite:
+            self.boss_alien.sprite.lasers.draw(screen) 
+            self.boss_alien.sprite.laser_beam.draw(screen)   
+            self.boss_alien.draw(screen)
+            self.boss_alien.update()
+
+        self.alien_lasers.draw(screen) # aliens laser
 
         # draw obstacles
         self.blocks.draw(screen)
 
         # draw alien
         self.aliens.draw(screen)
-        self.alien_lasers.draw(screen)
         self.extra.draw(screen)
 
+        # DISPLAY
+        self.display_score()
+        self.display_player_lives()
+
+
+        # note: display victory and game over message in pause 
+        self.victory_message()
+        self.game_over_message()
+   
+    def game_end_message(self,message,offset_x=0,offxet_y=0):
+        message_surf = self.font.render(message,False,'white')
+        message_rect = message_surf.get_rect(center = (screen_width/2 + offset_x,screen_height/2+offxet_y))
+        screen.blit(message_surf,message_rect)
+        self.restart=True
+        self.restart_message()
+
+        if self.hi_score <= self.score:
+            save_data = {
+                'High Score':self.score
+            }
+            with open('./save/save_file.txt','w') as save_file:
+                json.dump(save_data,save_file)
+
+
+        if not self.pause:
+            self.pause = True
+            # print('pause')
+            pygame.time.set_timer(PAUSE,200,1)
+
+    def victory_message(self):
+        if (not self.aliens.sprites() and 
+            not self.boss_alien.sprite and 
+            not self.player.sprite.playerHP <=0):
+            self.game_end_message('YOU WIN')
+    def game_over_message(self):
+        if self.player.sprite and self.player.sprite.playerHP <=0:
+           self.game_end_message('YOU LOSE :(')
+    def restart_message(self):
+        if self.restart:
+            restart_surf = self.font.render('PRESS R KEY TO RESTART',False,'white')
+            restart_rect = restart_surf.get_rect(center = (screen_width/2,screen_height/2+50))
+            screen.blit(restart_surf,restart_rect)
+            
+    def restart_game(self):
+        self.restart = False
+        self.pause = False
+
+        self.hi_score  = 0
+        if exists('./save/save_file.txt'):
+            with open('./save/save_file.txt') as save_file:
+                data = json.load(save_file)
+            self.hi_score = data['High Score'] 
+
+        # stop all previously playing music
+        # for music in self.music:
+        #     music.stop()
+        pygame.mixer.stop()
+
+        # Player setup
+        player_sprite = Player((screen_width/2,screen_height),screen_width,5)
+        self.player = pygame.sprite.GroupSingle(player_sprite)
+        # Score and Font setup
+        self.score = 0
+        # Player lives display setup
+        self.live_x_start_pos = screen_width - (self.live_surf.get_size()[0]*self.player.sprite.playerHP + 30)
+        # Obstacles setup
+        self.shape = Obstacle.shape
+        self.block_size = 6 # size of individual block
+        self.blocks = pygame.sprite.Group()
+        self.obstacle_amount = 4
+        self.ostable_x_positions = [num * (screen_width/self.obstacle_amount) for num in range(self.obstacle_amount)]
+        # * is unpacking operator
+        self.create_mutiple_obstacles(*self.ostable_x_positions,x_start=screen_width/15,y_start=480)
+        # Alien setup
+        self.aliens = pygame.sprite.Group()
+        self.alien_formation = Alien.testformation
+        self.alien_direction = 1
+        self.alien_lasers = pygame.sprite.Group() # alien lasers
+        self.base_aliens_amount = self.alien_setup(self.alien_formation)
+        self.alien_ratio = len(self.aliens.sprites())/self.base_aliens_amount
+        # Extra alien setup
+        self.extra = pygame.sprite.GroupSingle()
+        self.extra_spawn_time = randint(400,800) 
+        # Boss alien setup
+        self.boss_alien = pygame.sprite.GroupSingle()
+        self.boss_spawned = False
+        self.music[0].play(loops=-1) # play main theme again
+        self.current_music_track = 0
+    def paused(self):
+        self.pause=True
+        crt.draw(True)
+        while self.pause:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    keys = pygame.key.get_pressed()
+                    if keys[pygame.K_r] and game.restart:
+                        self.pause=False
+                        game.restart_game()
+                    if keys[pygame.K_ESCAPE] and not self.restart:
+                        self.pause = not self.pause
+
+            if not self.restart:
+                pause_surf = self.font.render('PAUSE ... ',False,'white')
+                pause_rect = pause_surf.get_rect(center = (screen_width/2,screen_height/2))
+                screen.blit(pause_surf,pause_rect)
+            pygame.display.flip()
+            clock.tick(30)
+           
+# CRT filter note: only to look a bit cool doesn't do much
+class CRT:
+    def __init__(self) -> None:
+        self.tv = pygame.image.load('./graphics/tv.png').convert_alpha()
+        self.tv = pygame.transform.scale(self.tv,(screen_width,screen_height))
+    def create_crt_lines(self):
+        line_height = 3 
+        line_amount = int(screen_height/line_height)
+        for line in range(line_amount):
+            y_pos = line *line_height
+            # draw on tv so it have the same opacity
+            pygame.draw.line(self.tv,'black',(0,y_pos),(screen_width,y_pos),1) 
+    def draw(self,pause=False):
+        if not pause:
+            self.tv.set_alpha(randint(65,90))
+        else: 
+            self.tv.set_alpha(200)
+        self.create_crt_lines()
+        screen.blit(self.tv,(0,0))
 if __name__  == '__main__':
     pygame.init()
+    pygame.mixer.pre_init(44100, -16, 1, 512)
     pygame.font.init()
     screen_width = 600
     screen_height = 600
-
-    screen = pygame.display.set_mode((600,600))
+    screen = pygame.display.set_mode((screen_width,screen_height))
     clock = pygame.time.Clock()
 
     game = Game() # create an instance of the game
-
+    crt = CRT()
     # The UserEvent will be sent out as an event signal
     # , repeated periodically after the specified time interval
-    ALIENLASER = pygame.USEREVENT + 1 # EVENT ID 25
+    ALIENLASER = pygame.USEREVENT + 1           # EVENT ID 25
+    CHARGELASER = pygame.USEREVENT + 2          # EVENT ID 26
+    PLAYENEXTMUSICTRACK = pygame.USEREVENT + 3  # EVENT ID 27
+    PAUSE = pygame.USEREVENT + 4                # EVENT ID 28
     pygame.time.set_timer(ALIENLASER,800)
-
 
     # Game loop
     while True:
@@ -219,8 +485,23 @@ if __name__  == '__main__':
                 sys.exit()
             if event.type == ALIENLASER:
                 game.alien_shoot() # alien shooting laser
+            if event.type == CHARGELASER and game.boss_alien.sprite:
+                game.boss_alien.sprite.wait=True
+                game.boss_alien.sprite.set_wait_timer(pygame.time.get_ticks())
+            if event.type == PLAYENEXTMUSICTRACK and game:
+                game.play_music_track(game.next_music_track,volume= 0.5)
+            if event.type == pygame.KEYDOWN:
+                keys = pygame.key.get_pressed()
+                if keys[pygame.K_r] and game.restart:
+                    game.restart_game()
+                if keys[pygame.K_ESCAPE]:
+                    game.paused()
+            if event.type == PAUSE:
+                game.paused()
+            
         screen.fill((30,30,30))
 
         game.run() #run the game and update game objects
+        crt.draw()
         pygame.display.flip()
         clock.tick(60)
