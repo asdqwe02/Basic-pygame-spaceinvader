@@ -1,7 +1,6 @@
 from genericpath import exists
 import json
 from random import randint, random
-from re import T
 from secrets import choice
 import pygame,sys,time
 from Laser import Laser
@@ -49,9 +48,10 @@ class Game:
         self.aliens = pygame.sprite.Group()
         # self.alien_formation = Alien.formation2
         # self.alien_formation = Alien.formation
-        self.alien_formation = Alien.formation2
+        self.alien_formation = choice(Alien.formation_array)
 
         self.alien_direction = 1
+        self.alien_down_distance = 1
         self.alien_lasers = pygame.sprite.Group() # alien lasers
         self.base_aliens_amount = self.alien_setup(self.alien_formation)
         self.alien_ratio = len(self.aliens.sprites())/self.base_aliens_amount
@@ -92,8 +92,8 @@ class Game:
     def create_mutiple_obstacles(self,*offset,x_start,y_start):
         for offset_x in offset:
             self.create_obstacle(x_start,y_start,offset_x)
-
-    def alien_setup(self,formation,x_distance=60,y_distance=48,offset_x=10,offset_y=100):
+    
+    def alien_setup(self,formation,x_distance=60,y_distance=48,offset_x=10,offset_y=85):
         color = {
             1:'red',
             2:'yellow',
@@ -103,12 +103,13 @@ class Game:
         # 40 is the width of the alien | space between alien is 20 -> 60
         # alien amount = count 'x' in the formation
         # x_start = (screen_width - (alien_amount*60)) / 2
-        alien_amount_on_row = []
+        space_on_row = []
         for row_formation in self.alien_formation: # coun the amount of alien on each rows
-            temp = row_formation.count('x')
-            alien_amount_on_row.append(temp)
+            # temp = row_formation.count('x')
+            temp = len(row_formation)
+            space_on_row.append(temp)
         x_start = [
-            (screen_width-(num*60))/2 for num in alien_amount_on_row 
+            (screen_width-(num*60))/2 for num in space_on_row 
         ]
         for row_index,row in enumerate(formation):
             # random alien color on each row
@@ -130,10 +131,10 @@ class Game:
         for alien in self.aliens.sprites():
             if alien.rect.right >= screen_width:
                 self.alien_direction = -1
-                self.alien_move_down(1)
+                self.alien_move_down(self.alien_down_distance)
             if alien.rect.left <= 0:
                 self.alien_direction = 1
-                self.alien_move_down(1)
+                self.alien_move_down(self.alien_down_distance)
     def alien_move_down(self,distance):
         if self.aliens: # avoid null ref
             for alien in self.aliens.sprites():
@@ -151,19 +152,17 @@ class Game:
         ratio = current_aliens_amount/self.base_aliens_amount
         if current_aliens_amount>=1 and ratio!=self.alien_ratio: 
             self.alien_ratio=ratio
-
-            if current_aliens_amount/self.base_aliens_amount <= 0.75:
-                for alien in self.aliens.sprites():
+            for alien in self.aliens.sprites():
+                if 0.5 < current_aliens_amount/self.base_aliens_amount <= 0.75:
                     alien.setspeed(2)
-            if current_aliens_amount/self.base_aliens_amount <= 0.50:
-                for alien in self.aliens.sprites():
+                if 0.25 < current_aliens_amount/self.base_aliens_amount <= 0.50:
                     alien.setspeed(3)
-            if current_aliens_amount/self.base_aliens_amount <= 0.25:
-                for alien in self.aliens.sprites():
+                if current_aliens_amount/self.base_aliens_amount <= 0.25:
                     alien.setspeed(4)
-            if current_aliens_amount == 1:
-                for last_alien in self.aliens.sprites():
-                    last_alien.setspeed(8)   
+                    self.alien_down_distance = 2
+                if current_aliens_amount == 1:
+                    self.alien_down_distance = 4
+                    alien.setspeed(8)   
         if current_aliens_amount == 0 and len(self.boss_alien.sprites())==0 and not self.boss_spawned: # spawn boss alien when there are no more aliens in list
             self.boss_alien.add(Alien.BossAlien(screen_width/2,-240,speed=2))
             self.boss_spawned=True    
@@ -190,7 +189,6 @@ class Game:
                 if pygame.sprite.spritecollide(laser,self.blocks,True):
                     laser.kill()
                     pass
-
                 # aliens collisions
                 collided_alien = pygame.sprite.spritecollide(laser,self.aliens,False) # get collided object
                 if collided_alien:
@@ -199,20 +197,17 @@ class Game:
                         alien.die()
                     laser.kill()
                     self.explosion_sound.play()
-
                 # boss alien collisions
                 if pygame.sprite.spritecollide(laser,self.boss_alien,False):
                     laser.kill()
                     self.boss_alien.sprite.getHit()
                     self.score +=50
                     self.explosion_sound.play()
-
                 # extra collisions
                 if pygame.sprite.spritecollide(laser,self.extra,True):
                     self.score+=100
                     laser.kill()
                     self.explosion_sound.play()
-
 
         # alien's laser
         if self.alien_lasers:
@@ -220,22 +215,20 @@ class Game:
                 # obstacles collisions
                 if pygame.sprite.spritecollide(laser,self.blocks,True):
                     laser.kill()
-
                 # player collisions
                 if pygame.sprite.spritecollide(laser,self.player,False):
                     # print('alien\'s laser hit player')
                     laser.kill()
                     self.player.sprite.getHit()
 
-        # alien boss's laser
+        # boss alien
         if self.boss_alien.sprite:
+            # boss alien's lasers
             if self.boss_alien.sprite.lasers:
                 for laser in self.boss_alien.sprite.lasers:
-
                     # collide with obstacles
                     if pygame.sprite.spritecollide(laser,self.blocks,True):
                         laser.kill()
-
                     # collide with player
                     if pygame.sprite.spritecollide(laser,self.player,False):
                         laser.kill()
@@ -246,6 +239,11 @@ class Game:
                     if pygame.sprite.spritecollide(laser_beam,self.player,False):
                         self.player.sprite.getHit(3)
 
+            # boss alien body collide with player or obstacles
+            pygame.sprite.spritecollide(self.boss_alien.sprite,self.blocks,True)
+            if pygame.sprite.spritecollide(self.boss_alien.sprite,self.blocks,False):
+                self.player.sprite.getHit(3)
+
         # aliens
         if self.aliens:
             for alien in self.aliens:
@@ -254,7 +252,6 @@ class Game:
                     # print('alien hit player')
                     self.player.sprite.getHit(3)
                     
-
     # DISPLAY FUNCTIONS
 
     # display score function
@@ -367,7 +364,7 @@ class Game:
            self.game_end_message('YOU LOSE :(')
     def restart_message(self):
         if self.restart:
-            restart_surf = self.font.render('PRESS R KEY TO RESTART',False,'white')
+            restart_surf = self.font.render('PRESS "R" KEY TO RESTART',False,'white')
             restart_rect = restart_surf.get_rect(center = (screen_width/2,screen_height/2+50))
             screen.blit(restart_surf,restart_rect)
             
@@ -403,7 +400,7 @@ class Game:
         self.create_mutiple_obstacles(*self.ostable_x_positions,x_start=screen_width/15,y_start=480)
         # Alien setup
         self.aliens = pygame.sprite.Group()
-        self.alien_formation = Alien.testformation
+        self.alien_formation = choice(Alien.formation_array)
         self.alien_direction = 1
         self.alien_lasers = pygame.sprite.Group() # alien lasers
         self.base_aliens_amount = self.alien_setup(self.alien_formation)
@@ -464,6 +461,9 @@ if __name__  == '__main__':
     pygame.font.init()
     screen_width = 600
     screen_height = 600
+    game_icon = pygame.image.load('./graphics/icon.png')
+    pygame.display.set_icon(game_icon)
+    pygame.display.set_caption('basic pygame Space invader')
     screen = pygame.display.set_mode((screen_width,screen_height))
     clock = pygame.time.Clock()
 

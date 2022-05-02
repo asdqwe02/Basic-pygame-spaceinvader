@@ -1,5 +1,3 @@
-from multiprocessing.connection import wait
-from operator import truediv
 from random import randint
 
 import pygame
@@ -8,10 +6,11 @@ from Laser import ChargeLaser,Laser
 
 CHARGELASER = pygame.USEREVENT + 2 # EVENT ID 26
 
+
 testformation = [
     'x'
 ]
-formation = [
+formation1 = [
     'xxxxxxxx',
     'xxxxxxxx',
     'xxxxxxxx',
@@ -23,22 +22,75 @@ formation = [
 formation2 = [
     'xxx',
     'xxxx',
-    'xxxxxxx',
-    'xxxxxxxxx',
-    'xxxxxxx',
+    'xxxxxx',
+    'xxxxxx',
+    'xxxxxx',
     'xxxx',
     'xxx',
 ]
 
 formation3 = [
-    ' xxxxx',       #  xxxxx
+    'xxxxx',        #  xxxxx
     'x x x',        #  x x x
     'x x x',        #  x x x
-    ' xxxxxxx',     # xxxxxxx
+    'xxxxxxx',      # xxxxxxx
     'x x x',        #  x x x
     'x  x',         #   x x
-    ' x'            #    x
+    'x'             #    x
 ]
+
+formation4 = [
+    'x',
+    'xxx',
+    'xxxx',
+    'xxxxxx',
+    'xxxxxxxx',
+    'xxx x xxx'
+]
+
+formation5 = [
+    'xxx x xxx',
+    'xxxxxxxx',
+    'xxxxxx',
+    'xxxx',
+    'xxx',
+    'x',
+]
+
+formation6 = [
+    'xx   xx',
+    'xx   xx',
+    'xxxxxxx',
+    'xxxxxx',
+    'xxxxxxx',
+    'xx  xx',
+    'xx  xx',
+]
+
+formation7 = [
+    'xx x xx',
+    'xx x xx',
+    'xxxxxxx',
+    'xx x xx',
+    'xxx xxx',
+    'xx x xx',
+    'xxxxxxx',
+]
+
+formation8 = [
+    'xx',
+    'xxx',
+    'xxxx',
+    'xxxxxxxx',
+    'xxxxxxxx',
+    'xxxxx',
+    'xxx xxx',
+    'xx   xx',
+]
+
+formation_array = [formation1,formation2,formation3,formation4,
+                    formation5,formation6,formation7,formation8]
+
 class Alien(pygame.sprite.Sprite):
     def __init__(self,color,x,y,speed=1):
         super().__init__()
@@ -102,6 +154,7 @@ class BossAlien(pygame.sprite.Sprite):
 
         self.speed = speed
         self.hp = hp
+        self.baseHP = self.hp
         self.die_time = 0
 
         self.x_constraint = screen_width
@@ -194,12 +247,14 @@ class BossAlien(pygame.sprite.Sprite):
         if pygame.time.get_ticks()-self.die_time>=time:
             self.kill()
     def checkHP(self):
+        if self.hp/self.baseHP <= 0.5:
+            self.speed = 4
         if self.hp <= 0 and self.die_time==0:
             self.die()
         elif self.die_time!=0: self.kill_after()
 
     def move_down(self):
-        self.rect.y+=1
+        self.rect.y+=4
     def move_sideway(self):
         self.rect.x += (self.direction*self.speed)
     def entering(self):
