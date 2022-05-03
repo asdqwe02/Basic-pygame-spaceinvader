@@ -4,13 +4,49 @@ from random import randint, random
 from secrets import choice
 import pygame,sys,time
 from Laser import Laser
-from debug import debug
+# from debug import debug
 from Player import Player
 import Obstacle
 import Alien
 
 class Game:
+    '''
+    The game instance to play the game \n
+    Attributes:
+        restart:                bool to let the game restart when press "R" key
+        pause:                  bool to pause the game
+        player:                 player object to contain the player sprite annd its information
+        score:                  hold the score value
+        font:                   font use in the game
+        live_surf:              the sprite that show player lives on top right of the screen
+        live_x_start_pos:       start position x for the live_surf  
+        shape:                  shape of the obstacles to draw
+        block_size:             the size of individual block that made up the obstacles
+        blocks:                 object to contain all the individual blocks of the obstacles
+        obstacle_amount:        amount of obstacles in the game
+        ostable_x_positions:    start position x for the obstacles
+        aliens:                 the object to contain a group of aliens and its information
+        alien_formation:        formation of the small aliens to set up in the game
+        alien_direction:        initial sideway direction for the aliens to go
+        alien_down_distance:    the distance for the group of aliens to move down when they reach boundary
+        alien_lasers:           object to contain lasers the group of aliens shoot out 
+        base_aliens_amount:     the initial amount of aliens in the group to calculate the ratio of aliens
+        alien_ratio:            ratio of alien = current amount of alien / base_aliens_amount - to change aliens speed and down distance
+        extra:                  object to contain the extra alien and its information
+        extra_spawn_time:       extra alien spawn time (random value from 400 to 800)
+        boss_alien:             object to contain the boss alien sprite and its information
+        boss_spawned:           bool to determine if the boss has spawned or not 
+        music:                  music array to hold all the music tracks use in the game
+        current_music_track:    current music track index to play
+        laser_sound:            sound of the laser shoot out by player and small aliene
+        explosion_sound:        sound when the player's laser hit the small aliens or boss alien
+    '''
     def __init__(self):
+        '''
+        input:
+
+        output: construct the game instance
+        '''
         self.restart = False
         self.pause = False
 
@@ -46,8 +82,7 @@ class Game:
 
         # Alien setup
         self.aliens = pygame.sprite.Group()
-        # self.alien_formation = Alien.formation2
-        # self.alien_formation = Alien.formation
+        # self.alien_formation = Alien.testformation # spawn boss right away
         self.alien_formation = choice(Alien.formation_array)
 
         self.alien_direction = 1
@@ -68,8 +103,8 @@ class Game:
 
         # Audio setup
         self.music = []
-        self.music.append(pygame.mixer.Sound('./audio/music.wav')) # music track 0
-        self.music.append(pygame.mixer.Sound('./audio/8-Bit Boss Battle- 4 - By EliteFerrex.mp3')) # music track 1
+        self.music.append(pygame.mixer.Sound('./audio/music.wav'))                                 # music track 0
+        self.music.append(pygame.mixer.Sound('./audio/8-Bit Boss Battle- 4 - By EliteFerrex.wav')) # music track 1
         self.music[0].set_volume(0.25)
         self.music[0].play(loops=-1)
 
@@ -81,6 +116,13 @@ class Game:
         self.explosion_sound.set_volume(0.3)
 
     def create_obstacle(self,x_start, y_start,offset_x):
+        '''
+        intput:
+            x_start:    start position x of the block
+            y_start:    start position y of the block
+            offset_x:   off set between each obstacle
+        ouput: create individual block in an obstacle base on the shape
+        '''
         for row_index, row in enumerate(self.shape):
             for column_index, col in enumerate(row):
                 if col == 'x':
@@ -90,17 +132,33 @@ class Game:
                     self.blocks.add(block)
 
     def create_mutiple_obstacles(self,*offset,x_start,y_start):
+        '''
+        intput:
+            x_start:    start position x of the onstacle
+            y_start:    start position y of the onstacle
+            offset_x:   off set between each obstacle
+        output: create multiple obstacles
+        '''
         for offset_x in offset:
             self.create_obstacle(x_start,y_start,offset_x)
     
     def alien_setup(self,formation,x_distance=60,y_distance=48,offset_x=10,offset_y=85):
+        '''
+        input:
+            formation:      alien formation randomly chosen when initialize
+            x_distance:     distance between each alien
+            y_distance:     distance between each row of the alien
+            offset_x:       use to set the offset x distance but no longer in use atm 
+            offset_y:       start distance of the alien formation from the top of the screen
+        output: return the length the aliens group, set up the alien base on the formation of the alien
+        '''
         color = {
             1:'red',
             2:'yellow',
             3:'green',
         }
 
-        # 40 is the width of the alien | space between alien is 20 -> 60
+        # ( 40 is the width of the alien | space between alien is 20 ) -> 60
         # alien amount = count 'x' in the formation
         # x_start = (screen_width - (alien_amount*60)) / 2
         space_on_row = []
@@ -124,10 +182,15 @@ class Game:
                     alien_sprite = Alien.Alien(c,x,y)
                     self.aliens.add(alien_sprite)
         return len(self.aliens)
-    # This is in main.py because it need to check out all the aliens which is being
-    # setup in the main.py file
-    # really want to put these alien control block inside the alien class but too lazy
+    
+    # should put these in the alien module
     def alien_side_pos_checker(self):
+        '''
+        input:
+
+        output: check if any of the aliens in the alien group hit the side of the screen boundary 
+                then move the group of aliens down by a certain amount of distance
+        '''
         for alien in self.aliens.sprites():
             if alien.rect.right >= screen_width:
                 self.alien_direction = -1
@@ -136,10 +199,20 @@ class Game:
                 self.alien_direction = 1
                 self.alien_move_down(self.alien_down_distance)
     def alien_move_down(self,distance):
+        '''
+        input:
+            distance:   the amount of distance to moove the alien group down
+        output: move the alien group down by distance
+        '''
         if self.aliens: # avoid null ref
             for alien in self.aliens.sprites():
                 alien.rect.y += distance
     def alien_shoot(self):
+        '''
+        input:
+
+        output: one of the alien in the alien group shoot out a laser and the laser sound is played
+        '''
         if self.aliens.sprites(): # to avoid null ref
             #choose random in collections
             random_alien = choice(self.aliens.sprites())
@@ -147,6 +220,11 @@ class Game:
             self.alien_lasers.add(laser_sprite)
             self.laser_sound.play()
     def alien_check_remain(self): # increase speed when certain amount of alien die sidenote: this look bad for performance
+        '''
+        input:
+        
+        output: check the amount of remain alien to increase the alien group speed and down distance
+        '''
         # trying to optimize it a bit
         current_aliens_amount =  len(self.aliens.sprites())
         ratio = current_aliens_amount/self.base_aliens_amount
@@ -159,19 +237,25 @@ class Game:
                     alien.setspeed(3)
                 if current_aliens_amount/self.base_aliens_amount <= 0.25:
                     alien.setspeed(4)
-                    self.alien_down_distance = 2
+                    self.alien_down_distance = 3
                 if current_aliens_amount == 1:
-                    self.alien_down_distance = 4
+                    self.alien_down_distance = 5
                     alien.setspeed(8)   
-        if current_aliens_amount == 0 and len(self.boss_alien.sprites())==0 and not self.boss_spawned: # spawn boss alien when there are no more aliens in list
+        # spawn boss alien when there are no more aliens in list                    
+        if current_aliens_amount == 0 and len(self.boss_alien.sprites())==0 and not self.boss_spawned:
             self.boss_alien.add(Alien.BossAlien(screen_width/2,-240,speed=2))
             self.boss_spawned=True    
-            self.music[self.current_music_track].fadeout(2000)
+            self.music[self.current_music_track].fadeout(2000) # fade out old music track over 2 seconds
             self.next_music_track = 1
-            pygame.time.set_timer(PLAYENEXTMUSICTRACK,2000,1)
+            pygame.time.set_timer(PLAYENEXTMUSICTRACK,2000,1) # set timer to play the next music track in 2 seconds
                 
     # Extra alien methods
     def extra_alien_timer(self):
+        '''
+        input:
+
+        output: check the extra alien timer and spawn the extra alien when the tim is <=0
+        '''
         self.extra_spawn_time -= 1
         if self.extra_spawn_time <= 0:
             # default speed for extra is 3
@@ -181,7 +265,11 @@ class Game:
 
     # Collision
     def collision_checks(self):
+        '''
+        input:
 
+        output: process the collision in the game and act accordingly
+        '''
         # player's lasers
         if self.player.sprite and self.player.sprite.lasers :
             for laser in self.player.sprite.lasers:
@@ -256,6 +344,11 @@ class Game:
 
     # display score function
     def display_score(self):
+        '''
+        input:
+
+        output: display the current score and high score on the top left of the screen
+        '''
         score_surf = self.font.render('score: {}'.format(self.score),False,'white')
         score_rect = score_surf.get_rect(topleft = (20,6))
         hi_score_surf = self.font.render('Hi-score: {}'.format(self.hi_score),False,'white')
@@ -264,6 +357,11 @@ class Game:
         screen.blit(hi_score_surf,hi_score_rect)
     # display player livies function
     def display_player_lives(self):
+        '''
+        input:
+
+        output: display the player lives on the top right of the screen
+        '''
         for live in range(self.player.sprite.playerHP):
             x = self.live_x_start_pos + (live*(self.live_surf.get_size()[0] + 10))
             screen.blit(self.live_surf,(x,10))
@@ -271,13 +369,24 @@ class Game:
 
     # Adio function
     def play_music_track(self,track_number,volume):
-         #loading in music while playing can cause delay in game :| idk how to fix
+        '''
+        input:
+            track_number:   the music track index to play
+            volume:         the volume to play the music
+        output: play the music track
+        '''
+        #loading in music while playing can cause delay in game :| idk how to fix
         self.music[self.current_music_track].stop()
         self.current_music_track = track_number
         self.music[track_number].set_volume(volume)
         self.music[track_number].play(loops=-1)
     
     def run(self):
+        '''
+        input:
+
+        output: process all the game information, update and draw sprite on screen
+        '''
         # Debug
         # if self.player.sprite.playerHP > 0:
         #     debug('Player HP: {}'.format(self.player.sprite.playerHP),y=40)
@@ -335,6 +444,14 @@ class Game:
         self.game_over_message()
    
     def game_end_message(self,message,offset_x=0,offxet_y=0):
+        '''
+        input:
+            message:    message to display on screen at the end of the game
+            offset_x:   the offset x to display thte message
+            offxet_y:   the offset y to display thte message
+        output: display the message at the end of the game, save highscore, set restart bool value to True
+                        set timer to pause the game after 200 miliseconds
+        '''
         message_surf = self.font.render(message,False,'white')
         message_rect = message_surf.get_rect(center = (screen_width/2 + offset_x,screen_height/2+offxet_y))
         screen.blit(message_surf,message_rect)
@@ -355,20 +472,40 @@ class Game:
             pygame.time.set_timer(PAUSE,200,1)
 
     def victory_message(self):
+        '''
+        input:
+
+        output: check if the player win and display "YOU WIN" message on screen
+        '''
         if (not self.aliens.sprites() and 
             not self.boss_alien.sprite and 
             not self.player.sprite.playerHP <=0):
             self.game_end_message('YOU WIN')
     def game_over_message(self):
+        '''
+        input:
+
+        output: check if the player win and display "YOU LOSE" message on screen
+        '''
         if self.player.sprite and self.player.sprite.playerHP <=0:
            self.game_end_message('YOU LOSE :(')
     def restart_message(self):
+        '''
+        input:
+
+        output: display the restart message on screen when the restart bool value is True
+        '''
         if self.restart:
             restart_surf = self.font.render('PRESS "R" KEY TO RESTART',False,'white')
             restart_rect = restart_surf.get_rect(center = (screen_width/2,screen_height/2+50))
             screen.blit(restart_surf,restart_rect)
             
     def restart_game(self):
+        '''
+        input:
+
+        output: reset all the game value to default
+        '''
         self.restart = False
         self.pause = False
 
@@ -402,6 +539,7 @@ class Game:
         self.aliens = pygame.sprite.Group()
         self.alien_formation = choice(Alien.formation_array)
         self.alien_direction = 1
+        self.alien_down_distance = 1
         self.alien_lasers = pygame.sprite.Group() # alien lasers
         self.base_aliens_amount = self.alien_setup(self.alien_formation)
         self.alien_ratio = len(self.aliens.sprites())/self.base_aliens_amount
@@ -414,6 +552,11 @@ class Game:
         self.music[0].play(loops=-1) # play main theme again
         self.current_music_track = 0
     def paused(self):
+        '''
+        input:
+
+        output: pause the game until the player press "ESC" key unless the game ended
+        '''
         self.pause=True
         crt.draw(True)
         while self.pause:
@@ -438,10 +581,25 @@ class Game:
            
 # CRT filter note: only to look a bit cool doesn't do much
 class CRT:
+    '''
+    Class to make a CRT filter on screen to make the game look a bit cooler\n
+    Attributes:
+        tv:     the sprite asset to draw on the crt filter on screen
+    '''
     def __init__(self) -> None:
+        '''
+        input:
+
+        output: construct the instance of CRT 
+        '''
         self.tv = pygame.image.load('./graphics/tv.png').convert_alpha()
         self.tv = pygame.transform.scale(self.tv,(screen_width,screen_height))
     def create_crt_lines(self):
+        '''
+        input:
+
+        output: draw the crt lines on screen with opacity base on the tv variable opacity
+        '''
         line_height = 3 
         line_amount = int(screen_height/line_height)
         for line in range(line_amount):
@@ -449,6 +607,12 @@ class CRT:
             # draw on tv so it have the same opacity
             pygame.draw.line(self.tv,'black',(0,y_pos),(screen_width,y_pos),1) 
     def draw(self,pause=False):
+        '''
+        input:
+            pause:  bool value to know if the game is pause
+        output: draw the crt filter on screen with the opacity range from 65 to 90 when the game not paused 
+                and 200 when the game is paused
+        '''
         if not pause:
             self.tv.set_alpha(randint(65,90))
         else: 
@@ -476,7 +640,6 @@ if __name__  == '__main__':
     PLAYENEXTMUSICTRACK = pygame.USEREVENT + 3  # EVENT ID 27
     PAUSE = pygame.USEREVENT + 4                # EVENT ID 28
     pygame.time.set_timer(ALIENLASER,800)
-
     # Game loop
     while True:
         for event in pygame.event.get():
