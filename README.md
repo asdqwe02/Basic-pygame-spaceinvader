@@ -5,8 +5,8 @@ Run game by running main.py file
 Installing all require packages from requirement.txt 
 
 Control: <br />
-<- -> 	moving around; emsp <br />
-Space 	Shoot laser; emsp  <br />
-ESC	Pause game; emsp <br />
-R	Restart game at the end 
+<- ->  -	moving around <br />
+Space  -	Shoot laser  <br />
+ESC    -	Pause game <br />
+R      -	Restart game at the end 
 	
