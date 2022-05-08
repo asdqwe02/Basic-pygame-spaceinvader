@@ -586,7 +586,7 @@ class CRT:
     Attributes:
         tv:     the sprite asset to draw on the crt filter on screen
     '''
-    def __init__(self) -> None:
+    def __init__(self):
         '''
         input:
 

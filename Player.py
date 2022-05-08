@@ -1,6 +1,10 @@
+from select import select
 import pygame
 # from debug import debug
 from Laser import Laser
+
+screen = pygame.display.set_mode((600,600))
+
 class Player(pygame.sprite.Sprite): # Inherit from Sprite class
     '''
     Class to represent the player playing the game, return an instance of the player\n
@@ -29,10 +33,9 @@ class Player(pygame.sprite.Sprite): # Inherit from Sprite class
 
         # Convert Alpha for transparent sprites/images
         self.image = pygame.image.load('./graphics/player.png').convert_alpha() 
-    
         # Position is a tuple midBottom = pos
         self.rect = self.image.get_rect(midbottom = pos)
-
+        # self.hitbox = (self.rect.x,self.rect.y+10,60,20)
         self.speed = speed
         self.max_x_constraint = constraint
         self.ready = True
@@ -84,6 +87,8 @@ class Player(pygame.sprite.Sprite): # Inherit from Sprite class
         self.get_input()
         self.checkBoundary()
         self.lasers.update()
+        # self.hitbox = (self.rect.x,self.rect.y+10,60,20)
+        # pygame.draw.rect(screen,(255,255,255),self.rect,1)
 
     def checkBoundary(self):
         '''

@@ -201,7 +201,7 @@ class BossAlien(pygame.sprite.Sprite):
         die_time:               the time when the alien boss start to die 
         x_constraint:           x constraint to check the boss alien poisition on screen 
                                     and move its position down when the boss alien reach the boundary
-        y_constraint:           x constraintn to pass into the boss alien's lasers
+        y_constraint:           y constraintn to pass into the boss alien's lasers
         direction:              direction sideway the boss alien going
         lasers:                 lasers shoot out from the boss alien
         laser_beam:             laser beam fire by the boss alien

@@ -1,0 +1,4 @@
+ESC - pause
+<- -> - to move around
+Spacebar - to shoot lasers
+R - to restart the game at the end
