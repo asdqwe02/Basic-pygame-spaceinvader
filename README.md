@@ -12,3 +12,10 @@ Space  -	Shoot laser  <br />
 ESC    -	Pause game <br />
 R      -	Restart game at the end 
 	
+Changes compare to reference:
+
++ added boss
++ added custom alien formation that change each time you play
++ added boss music and fade effect for music
++ added pause screen and restart when player die
++ added highscore
